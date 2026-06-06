@@ -1,5 +1,5 @@
-import type { Request, Response } from "./types";
-import { handlers } from "./handlers";
+import type { Request, Response } from "./types.js";
+import { handlers } from "./handlers.js";
 
 const HOST_NAME = "com.chromectl.host";
 const RETRY_DELAY_MS = 5000;

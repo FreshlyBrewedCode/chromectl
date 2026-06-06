@@ -1,4 +1,4 @@
-import type { Request, Response } from "./types";
+import type { Request, Response } from "./types.js";
 
 export type Handler = (args: unknown[], opts: object) => Promise<unknown>;
 
