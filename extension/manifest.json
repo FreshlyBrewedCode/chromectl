@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "chromectl",
+  "version": "1.0.0",
+  "description": "Native messaging companion for chromectl CLI",
+  "permissions": ["tabs", "tabGroups", "nativeMessaging"],
+  "host_permissions": [],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
