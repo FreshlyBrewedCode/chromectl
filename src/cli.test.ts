@@ -1,7 +1,20 @@
 import { test, expect, mock } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
+
+// Ensure the host binary exists so setup validation passes in tests
+function ensureHostBinary(): string {
+  const binaryPath = join(process.cwd(), "dist", process.platform === "win32" ? "chromectl-host.exe" : "chromectl-host");
+  if (!existsSync(binaryPath)) {
+    mkdirSync(dirname(binaryPath), { recursive: true });
+    writeFileSync(binaryPath, "#!/usr/bin/env sh\necho test", "utf-8");
+    chmodSync(binaryPath, 0o755);
+  }
+  return binaryPath;
+}
+
+const hostBinaryPath = ensureHostBinary();
 
 // Mock the client module so send() throws without connecting to a real socket
 mock.module("./client.ts", () => ({
@@ -121,7 +134,9 @@ test("setup command works correctly with temp dir", async () => {
     const parsed = JSON.parse(content);
     expect(parsed.name).toBe("com.chromectl.host");
     expect(parsed.type).toBe("stdio");
-    expect(parsed.path.endsWith("host.ts")).toBe(true);
+    const isHostTs = parsed.path.endsWith("host.ts");
+    const isBinary = parsed.path.endsWith("chromectl-host") || parsed.path.endsWith("chromectl-host.exe");
+    expect(isHostTs || isBinary).toBe(true);
 
     const output = capture.logs.join("\n");
     expect(output).toContain("Native host manifest written to");

@@ -64,6 +64,12 @@ export function getChromeProfileDir(): string {
 }
 
 export function getHostScriptPath(): string {
+  const binaryName = process.platform === "win32" ? "chromectl-host.exe" : "chromectl-host";
+  const binaryPath = resolve(join(__dirname, "..", "dist", binaryName));
+  if (existsSync(binaryPath)) {
+    return binaryPath;
+  }
+  // Fallback to source TypeScript for development
   return resolve(join(__dirname, "host.ts"));
 }
 
@@ -108,6 +114,22 @@ export function writeManifest(manifestPath: string, manifest: Manifest): void {
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
 }
 
+export function validateHostPath(hostPath: string): void {
+  try {
+    accessSync(hostPath, constants.F_OK);
+  } catch {
+    throw new Error(`Native messaging host does not exist: ${hostPath}`);
+  }
+
+  if (process.platform !== "win32") {
+    try {
+      accessSync(hostPath, constants.X_OK);
+    } catch {
+      throw new Error(`Native messaging host is not executable: ${hostPath}`);
+    }
+  }
+}
+
 export function validateManifest(manifestPath: string): void {
   try {
     accessSync(manifestPath, constants.F_OK | constants.R_OK);
@@ -129,13 +151,14 @@ export function validateManifest(manifestPath: string): void {
   }
 }
 
-export function setup(opts: { extId?: string; chromeDir?: string } = {}): string {
-  const hostPath = getHostScriptPath();
+export function setup(opts: { extId?: string; chromeDir?: string; hostPath?: string } = {}): string {
+  const hostPath = opts.hostPath || getHostScriptPath();
   const manifestPath = getManifestPath(opts.chromeDir);
   const manifest = buildManifest(hostPath, opts.extId);
 
   writeManifest(manifestPath, manifest);
   validateManifest(manifestPath);
+  validateHostPath(hostPath);
 
   return manifestPath;
 }

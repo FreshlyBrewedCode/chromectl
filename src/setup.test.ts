@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -8,12 +8,21 @@ import {
   getManifestPath,
   buildManifest,
   validateManifest,
+  validateHostPath,
   setup,
   getExtensionDir,
 } from "./setup.ts";
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "chromectl-test-"));
+}
+
+function makeTempExecutable(): string {
+  const dir = makeTempDir();
+  const path = join(dir, "chromectl-host");
+  writeFileSync(path, "#!/usr/bin/env sh\necho test", "utf-8");
+  chmodSync(path, 0o755);
+  return path;
 }
 
 test("getChromeProfileDir returns expected path for current platform", () => {
@@ -31,9 +40,11 @@ test("getChromeProfileDir returns expected path for current platform", () => {
   }
 });
 
-test("getHostScriptPath returns an absolute path ending in host.ts", () => {
+test("getHostScriptPath returns an absolute path ending in host.ts or chromectl-host", () => {
   const path = getHostScriptPath();
-  expect(path.endsWith("host.ts")).toBe(true);
+  const isHostTs = path.endsWith("host.ts");
+  const isBinary = path.endsWith("chromectl-host") || path.endsWith("chromectl-host.exe");
+  expect(isHostTs || isBinary).toBe(true);
   expect(path.startsWith("/")).toBe(true);
 });
 
@@ -63,9 +74,10 @@ test("buildManifest with extId injects the real ID", () => {
 
 test("setup creates the manifest file in the correct location", () => {
   const tempDir = makeTempDir();
+  const hostPath = makeTempExecutable();
 
   try {
-    const manifestPath = setup({ chromeDir: tempDir });
+    const manifestPath = setup({ chromeDir: tempDir, hostPath });
     expect(existsSync(manifestPath)).toBe(true);
     expect(manifestPath).toBe(
       join(tempDir, "NativeMessagingHosts", "com.chromectl.host.json")
@@ -75,33 +87,38 @@ test("setup creates the manifest file in the correct location", () => {
     const parsed = JSON.parse(content);
     expect(parsed.name).toBe("com.chromectl.host");
     expect(parsed.type).toBe("stdio");
-    expect(parsed.path.endsWith("host.ts")).toBe(true);
+    expect(parsed.path).toBe(hostPath);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+    rmSync(hostPath, { recursive: true, force: true });
   }
 });
 
 test("setup with extId updates the manifest with the correct ID", () => {
   const tempDir = makeTempDir();
+  const hostPath = makeTempExecutable();
 
   try {
-    const manifestPath = setup({ chromeDir: tempDir, extId: "testid123456" });
+    const manifestPath = setup({ chromeDir: tempDir, extId: "testid123456", hostPath });
     const content = readFileSync(manifestPath, "utf-8");
     const parsed = JSON.parse(content);
     expect(parsed.allowed_origins).toEqual(["chrome-extension://testid123456/"]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+    rmSync(hostPath, { recursive: true, force: true });
   }
 });
 
 test("setup validates that the manifest exists after writing", () => {
   const tempDir = makeTempDir();
+  const hostPath = makeTempExecutable();
 
   try {
-    const manifestPath = setup({ chromeDir: tempDir });
+    const manifestPath = setup({ chromeDir: tempDir, hostPath });
     expect(() => validateManifest(manifestPath)).not.toThrow();
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+    rmSync(hostPath, { recursive: true, force: true });
   }
 });
 
@@ -118,6 +135,37 @@ test("validateManifest throws when file has invalid JSON", () => {
     expect(() => validateManifest(badPath)).toThrow();
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("validateHostPath throws when file is missing", () => {
+  expect(() => validateHostPath("/nonexistent/path/chromectl-host")).toThrow();
+});
+
+test("validateHostPath throws when file is not executable", () => {
+  if (process.platform === "win32") {
+    // Skip executable check on Windows
+    return;
+  }
+
+  const tempDir = makeTempDir();
+  const nonExecutable = join(tempDir, "not-executable");
+
+  try {
+    writeFileSync(nonExecutable, "#!/bin/sh\necho test", "utf-8");
+    chmodSync(nonExecutable, 0o644);
+    expect(() => validateHostPath(nonExecutable)).toThrow();
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("validateHostPath succeeds for executable file", () => {
+  const hostPath = makeTempExecutable();
+  try {
+    expect(() => validateHostPath(hostPath)).not.toThrow();
+  } finally {
+    rmSync(hostPath, { recursive: true, force: true });
   }
 });
 

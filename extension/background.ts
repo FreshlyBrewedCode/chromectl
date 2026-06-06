@@ -21,32 +21,38 @@ function connect(): void {
     return;
   }
 
-  port.onMessage.addListener(async (msg: unknown) => {
-    const req = msg as Request;
-    const handler = handlers[req.cmd];
-
-    let res: Response;
-    if (!handler) {
-      res = {
-        id: req.id,
-        ok: false,
-        error: `Unknown command: ${req.cmd}`,
-      };
-    } else {
+  port.onMessage.addListener((msg: unknown) => {
+    (async () => {
       try {
-        const data = await handler(req.args ?? [], req.opts ?? {});
-        res = { id: req.id, ok: true, data };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        res = { id: req.id, ok: false, error: message };
-      }
-    }
+        const req = msg as Request;
+        const handler = handlers[req.cmd];
 
-    try {
-      port?.postMessage(res);
-    } catch (postErr) {
-      console.error("[chromectl] Failed to post response:", postErr);
-    }
+        let res: Response;
+        if (!handler) {
+          res = {
+            id: req.id,
+            ok: false,
+            error: `Unknown command: ${req.cmd}`,
+          };
+        } else {
+          try {
+            const data = await handler(req.args ?? [], req.opts ?? {});
+            res = { id: req.id, ok: true, data };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res = { id: req.id, ok: false, error: message };
+          }
+        }
+
+        try {
+          port?.postMessage(res);
+        } catch (postErr) {
+          console.error("[chromectl] Failed to post response:", postErr);
+        }
+      } catch (unexpectedErr) {
+        console.error("[chromectl] Unexpected error handling native message:", unexpectedErr);
+      }
+    })();
   });
 
   port.onDisconnect.addListener(() => {
@@ -70,4 +76,14 @@ function scheduleRetry(): void {
   }, RETRY_DELAY_MS);
 }
 
-connect();
+// Defer the initial connection so it doesn't block service worker registration.
+// In Brave (and Chrome), if chrome.runtime.connectNative throws during the
+// synchronous evaluation phase of the background script, the service worker
+// fails to register with "Status code: 3". A deferred connection lets the
+// registration complete first, and repeated failures are handled gracefully
+// by scheduleRetry() without crashing the worker.
+try {
+  setTimeout(connect, 100);
+} catch (err) {
+  console.error("[chromectl] Failed to schedule initial connection:", err);
+}

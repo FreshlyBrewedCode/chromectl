@@ -53,8 +53,23 @@ async function runBuild(): Promise<void> {
     throw new Error(`Extension compilation failed with exit code ${extExit}`);
   }
 
+  // Compile host binary
+  console.log("Compiling host binary...");
+  const hostOutfile = process.platform === "win32" ? "dist/chromectl-host.exe" : "dist/chromectl-host";
+  const hostProc = Bun.spawn({
+    cmd: ["bun", "build", "--compile", "src/host.ts", "--outfile", hostOutfile],
+    cwd: ROOT,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const hostExitCode = await hostProc.exited;
+  if (hostExitCode !== 0) {
+    throw new Error(`Host binary compilation failed with exit code ${hostExitCode}`);
+  }
+
   // Copy host script and its local dependencies into dist/
-  // so that when the compiled binary runs, getHostScriptPath() resolves correctly
+  // so that when the compiled binary runs, getHostScriptPath() can fall back
   console.log("Copying host script dependencies...");
   for (const file of ["host.ts", "protocol.ts", "types.ts"]) {
     const src = join(ROOT, "src", file);
@@ -64,6 +79,7 @@ async function runBuild(): Promise<void> {
 
   console.log("\nBuild complete!");
   console.log(`  Binary: ${join(DIST_DIR, "chromectl")}`);
+  console.log(`  Host: ${join(DIST_DIR, process.platform === "win32" ? "chromectl-host.exe" : "chromectl-host")}`);
   console.log(`  Extension: ${join(DIST_DIR, "extension")}`);
 }
 
