@@ -65,16 +65,35 @@ export function getChromeProfileDir(): string {
 
 export function getHostScriptPath(): string {
   const binaryName = process.platform === "win32" ? "chromectl-host.exe" : "chromectl-host";
-  const binaryPath = resolve(join(__dirname, "..", "dist", binaryName));
-  if (existsSync(binaryPath)) {
-    return binaryPath;
+
+  // When running from a compiled bun binary, __dirname is inside the virtual
+  // filesystem (e.g. /$bunfs/root/). The real binary on disk is process.execPath,
+  // and the host binary is shipped next to it.
+  const execDir = dirname(process.execPath);
+  const siblingBinary = resolve(join(execDir, binaryName));
+  if (existsSync(siblingBinary)) {
+    return siblingBinary;
   }
+
+  // Development / source run: look in dist/ relative to src/
+  const devBinary = resolve(join(__dirname, "..", "dist", binaryName));
+  if (existsSync(devBinary)) {
+    return devBinary;
+  }
+
   // Fallback to source TypeScript for development
   return resolve(join(__dirname, "host.ts"));
 }
 
 export function getExtensionDir(): string {
-  // Prefer compiled dist/extension when available (it has compiled JS that Chrome can load)
+  // When running from a compiled bun binary, look next to process.execPath
+  const execDir = dirname(process.execPath);
+  const siblingExt = resolve(join(execDir, "extension"));
+  if (existsSync(join(siblingExt, "manifest.json"))) {
+    return siblingExt;
+  }
+
+  // Development / source run: prefer dist/extension
   const distExt = resolve(join(__dirname, "..", "dist", "extension"));
   if (existsSync(join(distExt, "manifest.json"))) {
     return distExt;
