@@ -1,7 +1,7 @@
 import mri from "mri";
 import { commands } from "./commands.ts";
 import { send } from "./client.ts";
-import { printSetupInstructions, setup } from "./setup.ts";
+import { printSetupInstructions, setup, interactiveSetup } from "./setup.ts";
 import { version } from "../package.json" assert { type: "json" };
 
 function printUsage(): void {
@@ -56,11 +56,19 @@ export async function main(argv: string[]): Promise<number> {
   // Special case: setup is a top-level command
   if (positional[0] === "setup") {
     try {
-      const opts: { extId?: string; chromeDir?: string } = {};
-      if (parsed["ext-id"]) opts.extId = String(parsed["ext-id"]);
-      if (parsed["chrome-dir"]) opts.chromeDir = String(parsed["chrome-dir"]);
-      const manifestPath = setup(opts);
-      printSetupInstructions(manifestPath, opts.extId);
+      const hasExplicitFlags = parsed["ext-id"] || parsed["chrome-dir"];
+
+      if (hasExplicitFlags) {
+        const opts: { extId?: string; chromeDir?: string } = {};
+        if (parsed["ext-id"]) opts.extId = String(parsed["ext-id"]);
+        if (parsed["chrome-dir"]) opts.chromeDir = String(parsed["chrome-dir"]);
+        const manifestPath = setup(opts);
+        printSetupInstructions(manifestPath, opts.extId);
+      } else {
+        const result = await interactiveSetup();
+        printSetupInstructions(result.manifestPath, result.extId, result.browser);
+      }
+
       return 0;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

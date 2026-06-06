@@ -44,7 +44,8 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "mri": "^1.2.0"
+    "mri": "^1.2.0",
+    "@clack/prompts": "^0.10.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
