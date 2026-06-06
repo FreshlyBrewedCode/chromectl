@@ -1,7 +1,7 @@
 import { fileURLToPath } from "url";
 import { dirname, join, resolve } from "path";
 import { homedir } from "os";
-import { mkdirSync, writeFileSync, readFileSync, accessSync, constants } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, accessSync, constants, existsSync } from "fs";
 import * as p from "@clack/prompts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,6 +68,13 @@ export function getHostScriptPath(): string {
 }
 
 export function getExtensionDir(): string {
+  // Prefer compiled dist/extension when available (it has compiled JS that Chrome can load)
+  const distExt = resolve(join(__dirname, "..", "dist", "extension"));
+  if (existsSync(join(distExt, "manifest.json"))) {
+    return distExt;
+  }
+
+  // Fallback to source extension/ directory
   return resolve(join(__dirname, "..", "extension"));
 }
 
